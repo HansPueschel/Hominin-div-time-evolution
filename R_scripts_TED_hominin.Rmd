@@ -1,0 +1,2042 @@
+---
+title: "R script used in A Total Evidence approach to estimate divergence times in hominins Assessing body mass and encephalization trends in human evolution"
+author: "Hans P. Püschel and Thomas A. Püschel"
+date: "24-11-2020"
+output: html_document
+---
+This document contains the R script necessary to get the results and plots of the paper "A Total Evidence approach to estimate divergence times in hominins: Assessing body mass and encephalization trends in human evolution" by Hans P. Püschel, Ornella C. Bertrand, Joseph E. O’Reilly, René Bobe & Thomas A. Püschel. 
+
+**0) Load all the required packages**
+```{r, echo=FALSE}
+library("ape")
+library("nlme")
+library("AICcmodavg")
+library("nortest")
+library("rr2")
+library("ggplot2")
+library("tibble")
+library("phytools")
+library("paleotree")
+library("strap")
+library ("plotrix")
+library("ggmap")
+library("motmot")
+library("coda")
+library("geiger")
+```
+
+**1) Estimating PEQ using a PGLS regression**
+
+*PGLS using a Brownian motion model* 
+```{r echo=TRUE, warning=FALSE}
+par(mar=c(2,2,2,2))
+
+#Functions
+
+#Function for fix taxa names and Drop tips of taxa without body mass and/or brain mass estimations
+newtree<-function (tree){
+  
+  tree$tip.label<- c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "Au. garhi",   "K. platyops", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi", "Denisovan")
+  
+  #Drop tips of taxa without body mass and/or brain mass estimations
+  
+  ph<-drop.tip(tree, c("K. platyops", "Au. garhi", "Denisovan"))
+  plot(ph)
+  return(ph)
+  
+}
+
+
+#Plot stadistics function  
+
+plot_model<-function(model, name, tree){ #Plot stadistics function 
+  
+  pdf(paste0(name,"residuals-vs-fitted.pdf"),width = 18.27, height = 11.69, paper= "a4r") 
+  
+  plot(model, resid(., type="n")~fitted(.), main="Normalized Residuals v Fitted Values",
+       abline=c(0,0))
+  res <- resid(model, type="n")
+  qqnorm(res)
+  qqline(res)
+  res[which.max(res)]#species with the maximum residual 
+  
+  # Close the pdf file
+  dev.off() 
+  
+  #test for normality & homoscedasticity of the residuals - data normal if p-value not significant
+  lillie.test(rnorm(model))
+  capture.output(lillie.test(rnorm(model)),file=paste0(name,"rnorm.doc"))
+  
+  #R2 values
+  R2.pred(model, phy=tree)#I will use this one for the paper as it's more appropriate 
+  capture.output(R2.pred(model, phy=tree),file=paste0(name,"R2.doc"))
+  
+}
+
+
+##Import Homo data
+
+#Import data of body mass and brain mass 
+homo.dat<-read.csv("Homo_brain-body_mass2.csv", sep=",", header=T, row.names = 1)
+homo.data<-na.exclude(homo.dat)
+homo.data2<-homo.data
+
+
+#Import trees
+
+dembo<-read.nexus("dembo.con.tre")
+naledi<-read.nexus("naledi.con.tre")
+sediba<-read.nexus("sediba.con.tre")
+flores<-read.nexus("flores.con.tre")
+
+#Fix taxa names and Drop tips of taxa without body mass and/or brain mass estimations
+dembo<-newtree(dembo)
+naledi<-newtree(naledi)
+sediba<-newtree(sediba)
+flores<-newtree(flores)
+
+#Transform data to ln
+homo.data$Brain_weight_g<-log(homo.data$Brain_weight_g)
+names(homo.data)[names(homo.data) == "Brain_weight_g"] <- "ln_Brain_weight_g"
+homo.data$Body_mass_g<-log(homo.data$Body_mass_g)
+names(homo.data)[names(homo.data) == "Body_mass_g"] <- "ln_Body_mass_g"
+
+rownames(homo.data)==dembo$tip.label#Check if the row names and tip names are the same.
+
+
+#PGLS with Brownian model 
+#A) Brownian model Dembo hypothesis
+dem_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data, correlation = corBrownian(1,dembo), method="REML")#REML is recommended over ML
+summary(dem_brownian)
+
+R2.pred(dem_brownian, phy=dembo)
+#ggplot - linear regression - Phy 
+
+
+ggplot(homo.data, aes(x=ln_Body_mass_g, y=ln_Brain_weight_g))+
+  geom_abline(intercept=dem_brownian$coefficients[1], slope=dem_brownian$coefficients[2], size=0.5, colour="red")+
+  geom_point()+
+  geom_text(aes(label=rownames(homo.data)),hjust=0.5, vjust=-0.6, size=2)+
+  theme_gray()+
+  theme(axis.text=element_text(size=8),axis.title=element_text(size=10))+
+  labs(x='Ln (Body mass)', y='Ln (Brain weight)')
+
+
+Expected_brain_weight_g_dembo<-vector()
+PEQ_dembo<-vector()
+for (i in 1:nrow(homo.data2)){
+  
+  Expected_brain_weight_g_dembo<- append(Expected_brain_weight_g_dembo, exp(dem_brownian$coefficients[1])*(homo.data2[i,2]^dem_brownian$coefficients[2]))
+  PEQ_dembo<-append(PEQ_dembo, homo.data2[i,1]/(exp(dem_brownian$coefficients[1])*(homo.data2[i,2]^dem_brownian$coefficients[2])))
+  
+}
+
+
+#B) Brownian model H. naledi hypothesis
+nal_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data, correlation = corBrownian(1,naledi), method="REML")#REML is recommended over ML
+summary(nal_brownian)
+
+R2.pred(nal_brownian, phy=naledi)
+
+#ggplot - linear regression - Phy 
+
+# Open a pdf file
+
+
+ggplot(homo.data, aes(x=ln_Body_mass_g, y=ln_Brain_weight_g))+
+  geom_abline(intercept=nal_brownian$coefficients[1], slope=nal_brownian$coefficients[2], size=0.5, colour="red")+
+  geom_point()+
+  geom_text(aes(label=rownames(homo.data)),hjust=0.5, vjust=-0.6, size=2)+
+  theme_gray()+
+  theme(axis.text=element_text(size=8),axis.title=element_text(size=10))+
+  labs(x='Ln (Body mass)', y='Ln (Brain weight)')
+
+
+
+Expected_brain_weight_g_naledi<-vector()
+PEQ_naledi<-vector()
+for (i in 1:nrow(homo.data2)){
+  
+  Expected_brain_weight_g_naledi<- append(Expected_brain_weight_g_naledi, exp(nal_brownian$coefficients[1])*(homo.data2[i,2]^nal_brownian$coefficients[2]))
+  PEQ_naledi<-append(PEQ_naledi, homo.data2[i,1]/(exp(nal_brownian$coefficients[1])*(homo.data2[i,2]^nal_brownian$coefficients[2])))
+  
+}
+
+#C) Brownian model Au. sediba hypothesis
+sed_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data, correlation = corBrownian(1,sediba), method="REML")#REML is recommended over ML
+summary(sed_brownian)
+
+R2.pred(sed_brownian, phy=sediba)
+#ggplot - linear regression - Phy 
+
+# Open a pdf file
+
+ggplot(homo.data, aes(x=ln_Body_mass_g, y=ln_Brain_weight_g))+
+  geom_abline(intercept=sed_brownian$coefficients[1], slope=sed_brownian$coefficients[2], size=0.5, colour="red")+
+  geom_point()+
+  geom_text(aes(label=rownames(homo.data)),hjust=0.5, vjust=-0.6, size=2)+
+  theme_gray()+
+  theme(axis.text=element_text(size=8),axis.title=element_text(size=10))+
+  labs(x='Ln (Body mass)', y='Ln (Brain weight)')
+
+
+Expected_brain_weight_g_sediba<-vector()
+PEQ_sediba<-vector()
+for (i in 1:nrow(homo.data2)){
+  
+  Expected_brain_weight_g_sediba<- append(Expected_brain_weight_g_sediba, exp(sed_brownian$coefficients[1])*(homo.data2[i,2]^sed_brownian$coefficients[2]))
+  PEQ_sediba<-append(PEQ_sediba, homo.data2[i,1]/(exp(sed_brownian$coefficients[1])*(homo.data2[i,2]^sed_brownian$coefficients[2])))
+  
+}
+
+#D) Brownian model H. floresiensis hypothesis
+flo_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data, correlation = corBrownian(1,flores), method="REML")#REML is recommended over ML
+summary(flo_brownian)
+
+R2.pred(flo_brownian, phy=flores)
+#ggplot - linear regression - Phy 
+
+
+ggplot(homo.data, aes(x=ln_Body_mass_g, y=ln_Brain_weight_g))+
+  geom_abline(intercept=flo_brownian$coefficients[1], slope=flo_brownian$coefficients[2], size=0.5, colour="red")+
+  geom_point()+
+  geom_text(aes(label=rownames(homo.data)),hjust=0.5, vjust=-0.6, size=2)+
+  theme_gray()+
+  theme(axis.text=element_text(size=8),axis.title=element_text(size=10))+
+  labs(x='Ln (Body mass)', y='Ln (Brain weight)')
+
+
+
+
+Expected_brain_weight_g_flores<-vector()
+PEQ_flores<-vector()
+for (i in 1:nrow(homo.data2)){
+  
+  Expected_brain_weight_g_flores<- append(Expected_brain_weight_g_flores, exp(flo_brownian$coefficients[1])*(homo.data2[i,2]^flo_brownian$coefficients[2]))
+  PEQ_flores<-append(PEQ_flores, homo.data2[i,1]/(exp(flo_brownian$coefficients[1])*(homo.data2[i,2]^flo_brownian$coefficients[2])))
+  
+}
+
+```
+
+
+#Generate table for the paper
+```{r}
+homo.data_new<-cbind(homo.data2,Expected_brain_weight_g_dembo, PEQ_dembo,Expected_brain_weight_g_sediba, PEQ_sediba, Expected_brain_weight_g_naledi,PEQ_naledi,Expected_brain_weight_g_flores,PEQ_flores)
+write.csv(homo.data_new, "Homo_b-b_mass_PEQ.csv")
+```
+
+#generate table for the ancestral state reconstructions in the majority rule trees
+```{r}
+homo2<-read.csv("Homo_b-b_mass_PEQ.csv")
+homo3<-add_row(homo2, homo.dat[8,], .after = 7)
+homo3<-add_row(homo3, homo.dat[9,], .after = 8)
+homo3[8:9,1]<-c("Au. garhi", "K. platyops")
+write.csv(homo3, "Homo_b-b_PEQ_anc.csv")
+```
+
+
+**2) PEQ, body mass and brain mass ancestral character state reconstructions (ACSR)**
+
+*Maximum likelihood ancestral reconstructions using the function fastAnc()*
+
+This code calculates the ACSR for the the concensus trees of the 4 hypothesis tested, plotting time-scaled colored trees and traitgrams. 
+
+
+```{r}
+#Import homo data (PEQ and body size) 
+h.data<-read.csv("Homo_b-b_PEQ_anc.csv", header=T, row.names = 1)
+nam<-h.data[,1]
+row.names(h.data)<-nam
+h.data<-h.data[,-1]
+
+
+#Transform grams to kilograms
+h.data[,2]<-h.data[,2]/1000
+names(h.data)[names(h.data) == "Body_mass_g"] <- "Body_mass_kg"
+
+#Delete columns not needed in the analyses
+h.data<-h.data[,-c(3,5,7,9)]
+
+#Separate the data depending on the hypotheses
+dat.dembo<-h.data[,-c(4:6)]
+dat.sediba<-h.data[, -c(3,5,6)]
+dat.naledi<-h.data[, -c(3,4,6)]
+dat.flores<-h.data[, -c(3,4,5)]
+
+#Import trees
+
+#Tree 1
+dembo<-read.nexus("dembo.con.tre")
+dembo$tip.label<- c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "Au. garhi",   "K. platyops", "P. robustus", "P. boisei", "P. aethiopicus",
+                    "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                    "H. antecessor", "Georgian H. erectus", "H. naledi", "Denisovan")
+dembo<-drop.tip(dembo, "Denisovan")#Drop tips of taxon without body mass and brain mass estimations
+plot(dembo)
+
+#Tree 2
+sediba<-read.nexus("sediba.con.tre")
+sediba$tip.label<- c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "Au. garhi",   "K. platyops", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi", "Denisovan")
+sediba<-drop.tip(sediba, "Denisovan")#Drop tips of taxon without body mass and brain mass estimations
+plot(sediba)
+
+#Tree 3
+naledi<-read.nexus("naledi.con.tre")
+naledi$tip.label<- c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "Au. garhi",   "K. platyops", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi", "Denisovan")
+naledi<-drop.tip(naledi, "Denisovan")#Drop tips of taxon without body mass and brain mass estimations
+plot(naledi)
+
+#Tree 4
+flores<-read.nexus("flores.con.tre")
+flores$tip.label<- c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "Au. garhi",   "K. platyops", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi", "Denisovan")
+flores<-drop.tip(flores, "Denisovan")#Drop tips of taxon without body mass and brain mass estimations
+plot(flores)
+
+
+#Ancestral state reconstructions
+####################################################
+
+#Continous characters##############################
+
+
+#Reconstructing ancestral states using maximum likelihood
+
+get.ancestral<-function(homo.data,ph, nodes){#where homo.data is a data.frame with three columns (brain mass, body mass and PEQ), ph is the phylogeny and nodes are the nodes for the nodelabels
+  
+  for (i in 1:ncol(homo.data)){
+    
+    dat1<-as.matrix(homo.data)[,i]
+    dat2<-na.exclude(dat1)#remove Nas
+    dat3<-as.numeric(dat2)
+    dat3<-setNames(dat3, names(dat2))
+    
+    #Drop the taxa with missing data. This works for Body mass and PEQ that NAs
+    if (anyNA(dat1, recursive = FALSE)==TRUE){
+      phy<-drop.tip(ph, names(which(is.na(dat1))))
+      anc.eq<-fastAnc(phy,dat3,vars=TRUE,CI=TRUE) # estimate states  with variances & 95% confidence intervals for each node
+      
+      num.anc<-anc.eq$ace
+      
+      num.anc2<-round(num.anc,digits =2)
+      
+      
+      #plot ancestral states in the tree
+      
+      ####Using Maximum likelihood#####
+      
+      #Represent ancestral states as colors 
+      plt<-contMap(phy,dat3, plot=FALSE)
+      plt<-setMap(plt, invert=TRUE)  
+      
+      
+      # 2. Create a plot
+      plot(plt,legend=FALSE,ylim=c(1-0.09*(Ntip(plt$tree)-1),Ntip(plt$tree)))
+      
+      
+      add.color.bar(leg=0.3*max(nodeHeights(phy)),plt$cols,title=colnames(homo.data[i]),
+                    lims=plt$lims,digits=3,prompt=FALSE,x=0,
+                    y=8-0.08*(Ntip(plt$tree)-40),lwd=8,fsize=0.8,subtitle="")
+      
+      axisPhylo(side = 3, backward = TRUE,pos=-1, padj = 1 , cex.axis=1)
+      
+      
+      nodelabels(num.anc2, cex=0.8, frame="none", adj = c(-0.65, 0.15) )
+      
+      nodes2<-nodes[-c(7,8)]#delete nodes with NA values 
+      
+      nodelabels(nodes2, cex=0.8, frame="circle",bg="tomato2", col="white",piecol="white")
+      
+      #errorbar.contMap(plt)#how to plot the error
+      
+      
+      #use a phenogram to represent the phenotypes 
+      par(mar = c(5.1, 4.1, 4.1, 2.1))
+      
+     
+      # 2. Create a plot
+      phenogram(phy,dat3,fsize=1,ftype="i", ylab=colnames(homo.data[i]), spread.labels=TRUE, spread.cost=c(1,0))
+      
+      
+      
+    }else {#######This is for cases without NAs as brain mass #######################
+      
+      ####Using Maximum likelihood#####
+      
+      anc.eq<-fastAnc(ph,dat3,vars=TRUE,CI=TRUE) # estimate states  with variances & 95% confidence intervals for each node
+      
+      num.anc<-anc.eq$ace
+      
+      num.anc2<-round(num.anc,digits =2)
+      
+      
+      #plot ancestral states in the tree
+      
+      #Represent ancestral states as colors 
+      plt<-contMap(ph,dat3, plot=FALSE)
+      plt<-setMap(plt, invert=TRUE)
+      
+      # 2. Create a plot
+      plot(plt,legend=FALSE,ylim=c(1-0.09*(Ntip(plt$tree)-1),Ntip(plt$tree)))
+      
+      
+      add.color.bar(leg=0.3*max(nodeHeights(ph)),plt$cols,title=colnames(homo.data[i]),
+                    lims=plt$lims,digits=3,prompt=FALSE,x=0,
+                    y=8-0.08*(Ntip(plt$tree)-50),lwd=8,fsize=0.8,subtitle="")
+      
+      axisPhylo(side = 3, backward = TRUE,pos=-1, padj = 1 , cex.axis=1)
+      
+      
+      nodelabels(num.anc2, cex=0.8, frame="none", adj = c(-0.5, 0.15) )
+      
+      nodelabels(nodes, cex=0.8, frame="circle",bg="tomato2", col="white",piecol="white")
+      
+      #errorbar.contMap(plt)#how to plot the error
+      # Close the pdf file
+      dev.off() 
+      
+      #use a phenogram to represent the phenotypes 
+      par(mar = c(5.1, 4.1, 4.1, 2.1))
+      
+      
+      # 2. Create a plot
+      phenogram(ph,dat3,fsize=1,ftype="i", ylab=colnames(homo.data[i]), spread.labels=TRUE, spread.cost=c(1,0))
+      
+      # Close the pdf file
+      dev.off() 
+      
+    }
+  }
+}
+
+#Use the function get.ancestral to get the ML ancestral states from the different trees
+get.ancestral(dat.dembo,dembo, c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24))
+get.ancestral(dat.sediba, sediba, c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 24))
+get.ancestral(dat.naledi, naledi,c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 19, 21, 22, 24))
+get.ancestral(dat.flores,flores,c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 13, 20, 21, 22, 24))
+```
+
+
+**3) Sampling trees from the posterior**
+
+This is the code to sample the 10th time-calibrated tree from the posterior after discarding a 25% of burn-in using the .p and .t MrBayes files. It generates files "_post_tc_trees.txt" which contain the sampled trees from the posterior for each hypothesis. Uncomment the code provided below to run it.  
+
+```{r echo=FALSE, warning=FALSE}
+# #This code uses the .p and.t files from MrBayes and extracts a sample of time calibrated trees from the posterior 
+# rm(list = ls(all = T))
+# #setwd()#Fill with your working directory
+# 
+# #Create objects with the folders of each phylogenetic hypothesis
+# dem<-"1_Dembo_hyp"
+# sed<-"2_au_sed_hyp"
+# nal<-"3_h_naledi_hyp"
+# flo<-"4_h_flor_hyp"
+# 
+# #Function for sampling trees from the posterior
+# sample.trees<-function(folder, name){#Sampling calibrated trees from the posterior
+#   
+#   #setwd()#Fill with the working directory in which you have the five folders ("Maximum", "Minimum", "Minimum-maximum", "Min-max_95CI_max" and "Min-max_95CI_min") with the results of the empirical analyses
+#   wd<-getwd()
+#   setwd(paste0(wd,"/", folder))
+#   
+#   
+#   t1<-read.nexus(file="infile.nex.run1.t")#.tfile
+#   t1<-t1[-(1:(0.25*length(t1)))]#25% burnin
+#   t1<-t1[seq(1, length(t1), 10)]#select every 10th sample and discard all the others
+#   
+#   t2<-read.nexus(file="infile.nex.run2.t")#.tfile
+#   t2<-t2[-(1:(0.25*length(t2)))]#25% burnin
+#   t2<-t2[seq(1, length(t2), 10)]#select every 10th sample and discard all the others
+#   
+#   p1<-read.table(file="infile.nex.run1.p", header=TRUE, skip = 1)#.pfile
+#   p1<-p1[-( 1:(0.25*nrow(p1))),]#25% burnin
+#   p1<-p1[seq(1, nrow(p1), 10),]#select every 10th sample and discard all the others
+#   
+#   p2<-read.table(file="infile.nex.run2.p", header=TRUE, skip = 1)#.pfile
+#   p2<-p2[-( 1:(0.25*nrow(p2))),]#25% burnin
+#   p2<-p2[seq(1, nrow(p2), 10),]#select every 10th sample and discard all the others
+#   
+#   t<-c(t1,t2)
+#   p<-rbind(p1,p2)
+#   
+#   
+#   trees<-t[[1]]
+#   
+#   for (i in 1:length(t)){
+#     cr<-p$clockrate.all.[i]
+#     t[[i]]$edge.length<-t[[i]]$edge.length/cr
+#     
+#     trees<-append(trees, t[[i]])
+#     
+#   }
+#   trees<-trees[-1]
+#   
+#   #Save multiphylo object (saves time-calibrated posterior trees)
+#   setwd(wd)
+#   write.tree(trees, file = paste0(name, "_post_tc_trees.txt"))
+# }
+# 
+# sample.trees(folder = dem, name = "dembo")
+# sample.trees(folder = flo, name = "flores")
+# sample.trees(folder = nal, name = "naledi")
+# sample.trees(folder = sed, name = "sediba")
+
+```
+
+
+**4) Ancestral state reconstruction (ACSR) from the posterior trees**
+This code calculates the ML ancestral state reconstructions of brain mass, body mass and PEQ using the 9002 sampled posterior time-calibrated trees for each hypothesis
+
+```{r warning=FALSE}
+
+
+#Import homo data (brain weight and body size) 
+
+homo.data<-read.csv("Homo_b-b_m.csv", sep=",", header=T, row.names = 1)
+
+
+#prepare data for body mass and PEQ ancestral state reconstructions: remove "K_platyops" and "Au_garhi" due lack of body mass
+homo.data2<-homo.data[-c(8,9),]
+
+#Transform data for PEQ calculations
+homo.data3<-homo.data2
+homo.data3$Body_mass_kg<-homo.data3$Body_mass_kg*1000 #transform to grams
+names(homo.data3)[names(homo.data3) == "Body_mass_kg"] <- "Body_mass_g"
+#Transform to ln 
+homo.data.ln<-homo.data3
+homo.data.ln$Body_mass_g<-log(homo.data.ln$Body_mass_g)
+names(homo.data.ln)[names(homo.data.ln) == "Body_mass_g"] <- "ln_Body_mass_g"
+homo.data.ln$Brain_weight_g<-log(homo.data.ln$Brain_weight_g)
+names(homo.data.ln)[names(homo.data.ln) == "Brain_weight_g"] <- "ln_Brain_weight_g"
+
+
+#Import trees
+
+#Hypothesis 1: Dembo et al. 2016 tree  
+dembo_trees<-read.tree("dembo_post_tc_trees.txt")
+
+for (i in 1:(length(dembo_trees))){
+  
+  #remove Denisova: no body mass and brain mass estimations
+  dembo_trees[[i]]<-drop.tip(dembo_trees[[i]], "Denisovan")
+}
+
+#############################################
+#Anc rec BODY MASS
+
+homo_body2<-homo.data2[,2]
+homo_body2<-setNames(homo_body2, row.names(homo.data2))
+
+t<-dembo_trees
+
+for (i in 1:(length(t))){
+  
+  #remove "K_platyops" and "Au_garhi" due lack of body mass
+  t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
+}
+
+#####
+#Extract body mass ancestral states
+
+body_anc<-matrix(ncol=21)
+
+for (i in 1:(length(t))){
+  
+  
+  ages<-fastAnc(t[[i]],homo_body2)
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_habilis"))
+  a13<-ages[names(ages)==n13]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("H_habilis", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_naledi"))
+  a19<-ages[names(ages)==n19]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_antecessor"))
+  a20<-ages[names(ages)==n20]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a24))
+  
+  body_anc<-rbind(body_anc,anc)
+  
+}
+
+bod_anc_dembo<-body_anc[-1,]
+colnames(bod_anc_dembo)<-c(1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24)
+rownames(bod_anc_dembo)<-paste0("Samp",1:(nrow(bod_anc_dembo)))
+#setwd()#Fill with your working directory
+write.csv(bod_anc_dembo, file = "dembo_body_anc.csv")
+
+
+#############################################
+#Anc rec PEQ
+#remove "K_platyops" and "Au_garhi" due lack of body mass
+
+t<-dembo_trees
+
+for (i in 1:(length(t))){
+  
+  #"K_platyops" and "Au_garhi" due lack of body mass
+  t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
+}
+
+#####
+#Extract PEQ ancestral states from sampled trees
+
+peq_anc<-matrix(ncol=21)
+peq_tip<-matrix(ncol=22)
+colnames(peq_tip)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi")
+exp_brain<-matrix(ncol=22)
+colnames(exp_brain)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "P. robustus", "P. boisei", "P. aethiopicus",
+                       "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                       "H. antecessor", "Georgian H. erectus", "H. naledi")
+
+
+for (i in 1:(length(t))){
+  
+  
+  #generate a PGLS equation for calculate PEQ for each one of the sampled trees
+  dem_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data.ln, correlation = corBrownian(1,t[[i]]), method="REML")#REML is recommended over ML
+  Expected_brain_weight_g_dembo<-vector()
+  PEQ_dembo<-vector()
+  for (f in 1:nrow(homo.data3)){
+    
+    Expected_brain_weight_g_dembo<- append(Expected_brain_weight_g_dembo, exp(dem_brownian$coefficients[1])*(homo.data3[f,2]^dem_brownian$coefficients[2]))
+    PEQ_dembo<-append(PEQ_dembo, homo.data3[f,1]/(exp(dem_brownian$coefficients[1])*(homo.data3[f,2]^dem_brownian$coefficients[2])))
+    
+  }
+  
+  peq_tip<-rbind(peq_tip,PEQ_dembo)
+  exp_brain<-rbind(exp_brain, Expected_brain_weight_g_dembo) 
+  
+  
+  PEQ_dembo<-setNames(PEQ_dembo, rownames(homo.data3))#name tips 
+  
+  ages<-fastAnc(t[[i]],PEQ_dembo)
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_habilis"))
+  a13<-ages[names(ages)==n13]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("H_habilis", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_naledi"))
+  a19<-ages[names(ages)==n19]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_antecessor"))
+  a20<-ages[names(ages)==n20]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a24))
+  peq_anc<-rbind(peq_anc,anc)
+  
+}
+
+
+exp_brain<-exp_brain[-1,]
+rownames(exp_brain)<-paste0("Samp",1:(nrow(exp_brain)))
+write.csv(exp_brain, file = "dembo_exp_brain_mass.csv")
+
+peq_tip<-peq_tip[-1,]
+rownames(peq_tip)<-paste0("Samp",1:(nrow(peq_tip)))
+write.csv(peq_tip, file = "dembo_peq_tip.csv")
+
+peq_anc<-peq_anc[-1,]
+colnames(peq_anc)<-c(1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24)
+rownames(peq_anc)<-paste0("Samp",1:(nrow(peq_anc)))
+#setwd()#Fill with your working directory
+write.csv(peq_anc, file = "dembo_peq_anc.csv")
+
+
+#############################################
+#Anc rec BRAIN MASS
+
+homo_brain<-homo.data[,1]
+homo_brain<-setNames(homo_brain, row.names(homo.data))
+
+t<-dembo_trees
+
+
+#####
+#Extract Brain mass ancestral states from sampled trees
+
+brain_anc<-matrix(ncol=23)
+
+for (i in 1:(length(t))){
+  
+  
+  ages<-fastAnc(t[[i]],homo_brain)
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n7<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_garhi"))
+  a7<-ages[names(ages)==n7]
+  
+  n8<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "K_platyops"))
+  a8<-ages[names(ages)==n8]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_habilis"))
+  a13<-ages[names(ages)==n13]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("H_habilis", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_naledi"))
+  a19<-ages[names(ages)==n19]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_antecessor"))
+  a20<-ages[names(ages)==n20]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a24))
+  
+  brain_anc<-rbind(brain_anc,anc)
+  
+}
+
+brain_anc<-brain_anc[-1,]
+colnames(brain_anc)<-c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24)
+rownames(brain_anc)<-paste0("Samp",1:(nrow(brain_anc)))
+#setwd()#Fill with your working directory
+write.csv(brain_anc, file = "dembo_brain_anc.csv")
+####################################################
+
+
+#HYPOTHESIS 2: Au. sediba hypothesis ########################
+
+sediba_trees<-read.tree("sediba_post_tc_trees.txt")
+
+for (i in 1:(length(sediba_trees))){
+  
+  #remove Denisova: no body mass and brain mass estimations
+  sediba_trees[[i]]<-drop.tip(sediba_trees[[i]], "Denisovan")
+}
+
+#############################################
+#Anc rec BODY MASS
+
+homo_body2<-homo.data2[,2]
+homo_body2<-setNames(homo_body2, row.names(homo.data2))
+
+t<-sediba_trees
+
+for (i in 1:(length(t))){
+  
+  #remove "K_platyops" and "Au_garhi" due lack of body mass
+  t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
+}
+
+#####
+#Extract body mass ancestral states
+
+body_anc<-matrix(ncol=21)
+
+for (i in 1:(length(t))){
+  
+  
+  ages<-fastAnc(t[[i]],homo_body2)
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("Au_africanus", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_habilis"))
+  a13<-ages[names(ages)==n13]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_naledi"))
+  a19<-ages[names(ages)==n19]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_antecessor"))
+  a20<-ages[names(ages)==n20]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a9, a10, a15, a11, a12, a13, a14, a16, a17, a18, a19, a20, a21, a22, a24))
+  
+  body_anc<-rbind(body_anc,anc)
+  
+}
+
+bod_anc_sediba<-body_anc[-1,]
+colnames(bod_anc_sediba)<-c(1, 2, 3, 4, 5, 6, 9, 10, 15, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 24)
+rownames(bod_anc_sediba)<-paste0("Samp",1:(nrow(bod_anc_sediba)))
+#setwd()#Fill with your working directory
+write.csv(bod_anc_sediba, file = "sediba_body_anc.csv")
+
+
+#############################################
+#Anc rec PEQ
+
+t<-sediba_trees
+
+for (i in 1:(length(t))){
+  
+  #"K_platyops" and "Au_garhi" due lack of body mass
+  t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
+}
+
+#####
+#Extract PEQ ancestral states from sampled trees
+
+peq_anc<-matrix(ncol=21)
+peq_tip<-matrix(ncol=22)
+colnames(peq_tip)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi")
+exp_brain<-matrix(ncol=22)
+colnames(exp_brain)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "P. robustus", "P. boisei", "P. aethiopicus",
+                       "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                       "H. antecessor", "Georgian H. erectus", "H. naledi")
+
+
+for (i in 1:(length(t))){
+  
+  
+  #generate a PGLS equation for calculate PEQ for each one of the sampled trees
+  dem_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data.ln, correlation = corBrownian(1,t[[i]]), method="REML")#REML is recommended over ML
+  Expected_brain_weight_g_sediba<-vector()
+  PEQ_sediba<-vector()
+  for (f in 1:nrow(homo.data3)){
+    
+    Expected_brain_weight_g_sediba<- append(Expected_brain_weight_g_sediba, exp(dem_brownian$coefficients[1])*(homo.data3[f,2]^dem_brownian$coefficients[2]))
+    PEQ_sediba<-append(PEQ_sediba, homo.data3[f,1]/(exp(dem_brownian$coefficients[1])*(homo.data3[f,2]^dem_brownian$coefficients[2])))
+    
+  }
+  
+  peq_tip<-rbind(peq_tip,PEQ_sediba)
+  exp_brain<-rbind(exp_brain, Expected_brain_weight_g_sediba) 
+  
+  
+  PEQ_sediba<-setNames(PEQ_sediba, rownames(homo.data3))#name tips 
+  
+  ages<-fastAnc(t[[i]],PEQ_sediba)
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("Au_africanus", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_habilis"))
+  a13<-ages[names(ages)==n13]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_naledi"))
+  a19<-ages[names(ages)==n19]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_antecessor"))
+  a20<-ages[names(ages)==n20]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a9, a10, a15, a11, a12, a13, a14, a16, a17, a18, a19, a20, a21, a22, a24))
+  peq_anc<-rbind(peq_anc,anc)
+  
+}
+
+
+exp_brain<-exp_brain[-1,]
+rownames(exp_brain)<-paste0("Samp",1:(nrow(exp_brain)))
+write.csv(exp_brain, file = "sediba_exp_brain_mass.csv")
+
+peq_tip<-peq_tip[-1,]
+rownames(peq_tip)<-paste0("Samp",1:(nrow(peq_tip)))
+write.csv(peq_tip, file = "sediba_peq_tip.csv")
+
+peq_anc<-peq_anc[-1,]
+colnames(peq_anc)<-c(1, 2, 3, 4, 5, 6, 9, 10, 15, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 24)
+rownames(peq_anc)<-paste0("Samp",1:(nrow(peq_anc)))
+#setwd()#Fill with your working directory
+write.csv(peq_anc, file = "sediba_peq_anc.csv")
+
+
+#############################################
+#Anc rec BRAIN MASS
+
+homo_brain<-homo.data[,1]
+homo_brain<-setNames(homo_brain, row.names(homo.data))
+
+t<-sediba_trees
+
+
+#####
+#Extract Brain mass ancestral states from sampled trees
+
+brain_anc<-matrix(ncol=23)
+
+for (i in 1:(length(t))){
+  
+  
+  ages<-fastAnc(t[[i]],homo_brain)
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n7<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_garhi"))
+  a7<-ages[names(ages)==n7]
+  
+  n8<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "K_platyops"))
+  a8<-ages[names(ages)==n8]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("Au_africanus", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_habilis"))
+  a13<-ages[names(ages)==n13]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_naledi"))
+  a19<-ages[names(ages)==n19]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_antecessor"))
+  a20<-ages[names(ages)==n20]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a15, a11, a12, a13, a14, a16, a17, a18, a19, a20, a21, a22, a24))
+  brain_anc<-rbind(brain_anc,anc)
+  
+}
+
+brain_anc<-brain_anc[-1,]
+colnames(brain_anc)<-c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 24)
+rownames(brain_anc)<-paste0("Samp",1:(nrow(brain_anc)))
+#setwd()#Fill with your working directory
+write.csv(brain_anc, file = "sediba_brain_anc.csv")
+####################################################
+
+
+
+
+#HYPOTHESIS 3: H. naledi  
+naledi_trees<-read.tree("naledi_post_tc_trees.txt")
+
+for (i in 1:(length(naledi_trees))){
+  
+  #remove Denisova: no body mass and brain mass estimations
+  naledi_trees[[i]]<-drop.tip(naledi_trees[[i]], "Denisovan")
+}
+
+#############################################
+#Anc rec BODY MASS
+
+homo_body2<-homo.data2[,2]
+homo_body2<-setNames(homo_body2, row.names(homo.data2))
+
+t<-naledi_trees
+
+for (i in 1:(length(t))){
+  
+  #remove "K_platyops" and "Au_garhi" due lack of body mass
+  t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
+}
+
+#####
+#Extract body mass ancestral states
+
+body_anc<-matrix(ncol=21)
+
+for (i in 1:(length(t))){
+  
+  
+  ages<-fastAnc(t[[i]],homo_body2)
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_habilis"))
+  a13<-ages[names(ages)==n13]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("H_habilis", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_ergaster"))
+  a20<-ages[names(ages)==n20]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_antecessor"))
+  a19<-ages[names(ages)==n19]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a20, a19, a21, a22, a24))
+  
+  body_anc<-rbind(body_anc,anc)
+  
+}
+
+bod_anc_naledi<-body_anc[-1,]
+colnames(bod_anc_naledi)<-c(1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 19, 21, 22, 24)
+rownames(bod_anc_naledi)<-paste0("Samp",1:(nrow(bod_anc_naledi)))
+#setwd()#Fill with your working directory
+write.csv(bod_anc_naledi, file = "naledi_body_anc.csv")
+
+
+#############################################
+#Anc rec PEQ
+
+
+t<-naledi_trees
+
+for (i in 1:(length(t))){
+  
+  #"K_platyops" and "Au_garhi" due lack of body mass
+  t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
+}
+
+#####
+#Extract PEQ ancestral states from sampled trees
+
+peq_anc<-matrix(ncol=21)
+peq_tip<-matrix(ncol=22)
+colnames(peq_tip)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi")
+exp_brain<-matrix(ncol=22)
+colnames(exp_brain)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "P. robustus", "P. boisei", "P. aethiopicus",
+                       "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                       "H. antecessor", "Georgian H. erectus", "H. naledi")
+
+
+for (i in 1:(length(t))){
+  
+  
+  #generate a PGLS equation for calculate PEQ for each one of the sampled trees
+  dem_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data.ln, correlation = corBrownian(1,t[[i]]), method="REML")#REML is recommended over ML
+  Expected_brain_weight_g_naledi<-vector()
+  PEQ_naledi<-vector()
+  for (f in 1:nrow(homo.data3)){
+    
+    Expected_brain_weight_g_naledi<- append(Expected_brain_weight_g_naledi, exp(dem_brownian$coefficients[1])*(homo.data3[f,2]^dem_brownian$coefficients[2]))
+    PEQ_naledi<-append(PEQ_naledi, homo.data3[f,1]/(exp(dem_brownian$coefficients[1])*(homo.data3[f,2]^dem_brownian$coefficients[2])))
+    
+  }
+  
+  peq_tip<-rbind(peq_tip,PEQ_naledi)
+  exp_brain<-rbind(exp_brain, Expected_brain_weight_g_naledi) 
+  
+  
+  PEQ_naledi<-setNames(PEQ_naledi, rownames(homo.data3))#name tips 
+  
+  ages<-fastAnc(t[[i]],PEQ_naledi)
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_habilis"))
+  a13<-ages[names(ages)==n13]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("H_habilis", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_ergaster"))
+  a20<-ages[names(ages)==n20]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_antecessor"))
+  a19<-ages[names(ages)==n19]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a20, a19, a21, a22, a24))
+  peq_anc<-rbind(peq_anc,anc)
+  
+}
+
+
+exp_brain<-exp_brain[-1,]
+rownames(exp_brain)<-paste0("Samp",1:(nrow(exp_brain)))
+write.csv(exp_brain, file = "naledi_exp_brain_mass.csv")
+
+peq_tip<-peq_tip[-1,]
+rownames(peq_tip)<-paste0("Samp",1:(nrow(peq_tip)))
+write.csv(peq_tip, file = "naledi_peq_tip.csv")
+
+peq_anc<-peq_anc[-1,]
+colnames(peq_anc)<-c(1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 19, 21, 22, 24)
+rownames(peq_anc)<-paste0("Samp",1:(nrow(peq_anc)))
+#setwd()#Fill with your working directory
+write.csv(peq_anc, file = "naledi_peq_anc.csv")
+
+
+#############################################
+#Anc rec BRAIN MASS
+
+homo_brain<-homo.data[,1]
+homo_brain<-setNames(homo_brain, row.names(homo.data))
+
+t<-naledi_trees
+
+
+#####
+#Extract Brain mass ancestral states from sampled trees
+
+brain_anc<-matrix(ncol=23)
+
+for (i in 1:(length(t))){
+  
+  ages<-fastAnc(t[[i]],homo_brain)#######
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n7<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_garhi"))
+  a7<-ages[names(ages)==n7]
+  
+  n8<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "K_platyops"))
+  a8<-ages[names(ages)==n8]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_habilis"))
+  a13<-ages[names(ages)==n13]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("H_habilis", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_ergaster"))
+  a20<-ages[names(ages)==n20]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_antecessor"))
+  a19<-ages[names(ages)==n19]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a20, a19, a21, a22, a24))
+  brain_anc<-rbind(brain_anc,anc)
+  
+}
+
+brain_anc<-brain_anc[-1,]
+colnames(brain_anc)<-c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 19, 21, 22, 24)
+rownames(brain_anc)<-paste0("Samp",1:(nrow(brain_anc)))
+#setwd()#Fill with your working directory
+write.csv(brain_anc, file = "naledi_brain_anc.csv")
+####################################################
+
+
+#HYPOTHESIS 4: Homo floresiensis 
+flores_trees<-read.tree("flores_post_tc_trees.txt")
+
+for (i in 1:(length(flores_trees))){
+  
+  #remove Denisova: no body mass and brain mass estimations
+  flores_trees[[i]]<-drop.tip(flores_trees[[i]], "Denisovan")
+}
+
+#############################################
+#Anc rec BODY MASS
+
+homo_body2<-homo.data2[,2]
+homo_body2<-setNames(homo_body2, row.names(homo.data2))
+
+t<-flores_trees
+
+for (i in 1:(length(t))){
+  
+  #remove "K_platyops" and "Au_garhi" due lack of body mass
+  t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
+}
+
+#####
+#Extract body mass ancestral states
+
+body_anc<-matrix(ncol=21)
+
+for (i in 1:(length(t))){
+  
+  
+  ages<-fastAnc(t[[i]],homo_body2)
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("H_habilis", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_naledi"))
+  a19<-ages[names(ages)==n19]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_erectus"))
+  a13<-ages[names(ages)==n13]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_antecessor"))
+  a20<-ages[names(ages)==n20]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a9, a10, a11, a12, a14, a15, a16, a17, a18, a19, a13, a20, a21, a22, a24))
+  
+  body_anc<-rbind(body_anc,anc)
+  
+}
+
+bod_anc_flores<-body_anc[-1,]
+colnames(bod_anc_flores)<-c(1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 13, 20, 21, 22, 24)
+rownames(bod_anc_flores)<-paste0("Samp",1:(nrow(bod_anc_flores)))
+#setwd()#Fill with your working directory
+write.csv(bod_anc_flores, file = "flores_body_anc.csv")
+
+
+#############################################
+#Anc rec PEQ
+#remove "K_platyops" and "Au_garhi" due lack of body mass
+
+t<-flores_trees
+
+for (i in 1:(length(t))){
+  
+  #"K_platyops" and "Au_garhi" due lack of body mass
+  t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
+}
+
+#####
+#Extract PEQ ancestral states from sampled trees
+
+peq_anc<-matrix(ncol=21)
+peq_tip<-matrix(ncol=22)
+colnames(peq_tip)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi")
+exp_brain<-matrix(ncol=22)
+colnames(exp_brain)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "P. robustus", "P. boisei", "P. aethiopicus",
+                       "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                       "H. antecessor", "Georgian H. erectus", "H. naledi")
+
+
+for (i in 1:(length(t))){
+  
+  
+  #generate a PGLS equation for calculate PEQ for each one of the sampled trees
+  dem_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data.ln, correlation = corBrownian(1,t[[i]]), method="REML")#REML is recommended over ML
+  Expected_brain_weight_g_flores<-vector()
+  PEQ_flores<-vector()
+  for (f in 1:nrow(homo.data3)){
+    
+    Expected_brain_weight_g_flores<- append(Expected_brain_weight_g_flores, exp(dem_brownian$coefficients[1])*(homo.data3[f,2]^dem_brownian$coefficients[2]))
+    PEQ_flores<-append(PEQ_flores, homo.data3[f,1]/(exp(dem_brownian$coefficients[1])*(homo.data3[f,2]^dem_brownian$coefficients[2])))
+    
+  }
+  
+  peq_tip<-rbind(peq_tip,PEQ_flores)
+  exp_brain<-rbind(exp_brain, Expected_brain_weight_g_flores) 
+  
+  
+  PEQ_flores<-setNames(PEQ_flores, rownames(homo.data3))#name tips 
+  
+  ages<-fastAnc(t[[i]],PEQ_flores)
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("H_habilis", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_naledi"))
+  a19<-ages[names(ages)==n19]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_erectus"))
+  a13<-ages[names(ages)==n13]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_antecessor"))
+  a20<-ages[names(ages)==n20]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a9, a10, a11, a12, a14, a15, a16, a17, a18, a19, a13, a20, a21, a22, a24))
+  peq_anc<-rbind(peq_anc,anc)
+  
+}
+
+
+exp_brain<-exp_brain[-1,]
+rownames(exp_brain)<-paste0("Samp",1:(nrow(exp_brain)))
+write.csv(exp_brain, file = "flores_exp_brain_mass.csv")
+
+peq_tip<-peq_tip[-1,]
+rownames(peq_tip)<-paste0("Samp",1:(nrow(peq_tip)))
+write.csv(peq_tip, file = "flores_peq_tip.csv")
+
+peq_anc<-peq_anc[-1,]
+colnames(peq_anc)<-c(1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 13, 20, 21, 22, 24)
+rownames(peq_anc)<-paste0("Samp",1:(nrow(peq_anc)))
+#setwd()#Fill with your working directory
+write.csv(peq_anc, file = "flores_peq_anc.csv")
+
+
+#############################################
+#Anc rec BRAIN MASS
+
+homo_brain<-homo.data[,1]
+homo_brain<-setNames(homo_brain, row.names(homo.data))
+
+t<-flores_trees
+
+
+#####
+#Extract Brain mass ancestral states from sampled trees
+
+brain_anc<-matrix(ncol=23)
+
+for (i in 1:(length(t))){
+  
+  
+  ages<-fastAnc(t[[i]],homo_brain)
+  
+  
+  n1<-getMRCA(phy = t[[i]],tip = c("Gorilla_gorilla", "Pan_troglodytes"))
+  a1<-ages[names(ages)==n1]
+  
+  n2<-getMRCA(phy=t[[i]], tip=c("Pan_troglodytes" , "S_tchadensis"))
+  a2<-ages[names(ages)==n2]
+  
+  n3<-getMRCA(phy=t[[i]], tip=c("S_tchadensis", "Ar_ramidus"))
+  a3<-ages[names(ages)==n3]
+  
+  n4<-getMRCA(phy=t[[i]], tip=c("Ar_ramidus", "Au_anamensis"))
+  a4<-ages[names(ages)==n4]
+  
+  n5<-getMRCA(phy=t[[i]], tip=c("Au_anamensis", "Au_afarensis"))
+  a5<-ages[names(ages)==n5]
+  
+  n6<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_africanus"))
+  a6<-ages[names(ages)==n6]
+  
+  n7<-getMRCA(phy=t[[i]], tip=c("Au_afarensis", "Au_garhi"))
+  a7<-ages[names(ages)==n7]
+  
+  n8<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "K_platyops"))
+  a8<-ages[names(ages)==n8]
+  
+  n9<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "H_floresiensis"))
+  a9<-ages[names(ages)==n9]
+  
+  n10<-getMRCA(phy=t[[i]], tip=c("Au_africanus", "P_aethiopicus"))
+  a10<-ages[names(ages)==n10]
+  
+  n11<-getMRCA(phy=t[[i]],tip = c("P_aethiopicus", "P_boisei"))
+  a11<-ages[names(ages)==n11]
+  
+  n12<-getMRCA(phy=t[[i]],tip = c("P_boisei", "P_robustus"))
+  a12<-ages[names(ages)==n12]
+  
+  n14<-getMRCA(phy=t[[i]],tip = c("H_habilis", "H_rudolfensis"))
+  a14<-ages[names(ages)==n14]
+  
+  n15<-getMRCA(phy=t[[i]],tip = c("H_habilis", "Au_sediba"))
+  a15<-ages[names(ages)==n15]
+  
+  n16<-getMRCA(phy=t[[i]],tip = c("H_rudolfensis", "Georgian_H_erectus"))
+  a16<-ages[names(ages)==n16]
+  
+  n17<-getMRCA(phy=t[[i]],tip = c("Georgian_H_erectus", "H_ergaster"))
+  a17<-ages[names(ages)==n17]
+  
+  n18<-getMRCA(phy=t[[i]],tip = c("H_ergaster", "H_erectus"))
+  a18<-ages[names(ages)==n18]
+  
+  n19<-getMRCA(phy=t[[i]],tip = c("H_erectus", "H_naledi"))
+  a19<-ages[names(ages)==n19]
+  
+  n13<-getMRCA(phy=t[[i]],tip = c("H_floresiensis", "H_erectus"))
+  a13<-ages[names(ages)==n13]
+  
+  n20<-getMRCA(phy=t[[i]],tip = c("H_naledi", "H_antecessor"))
+  a20<-ages[names(ages)==n20]
+  
+  n21<-getMRCA(phy=t[[i]],tip = c("H_antecessor", "H_sapiens"))
+  a21<-ages[names(ages)==n21]
+  
+  n22<-getMRCA(phy=t[[i]],tip = c("H_heidelbergensis", "H_sapiens"))
+  a22<-ages[names(ages)==n22]
+  
+  n24<-getMRCA(phy=t[[i]],tip = c("H_sapiens", "H_neanderthalensis"))
+  a24<-ages[names(ages)==n24]
+  
+  
+  anc<-append(vector(), c(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a14, a15, a16, a17, a18, a19, a13, a20, a21, a22, a24))
+  
+  brain_anc<-rbind(brain_anc,anc)
+  
+}
+
+brain_anc<-brain_anc[-1,]
+colnames(brain_anc)<-c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 13, 20, 21, 22, 24)
+rownames(brain_anc)<-paste0("Samp",1:(nrow(brain_anc)))
+#setwd()#Fill with your working directory
+write.csv(brain_anc, file = "flores_brain_anc.csv")
+
+```
+
+**5) Body mass ACSR vs Brain mass ACSR regressions**
+This code calculates regression between Body mass ACSR vs Brain mass ACSR.
+
+```{r echo=FALSE, warning=FALSE}
+#Import homo data (PEQ and body size) 
+h.data<-read.csv("Homo_b-b_PEQ_anc.csv", header=T, row.names = 1)
+nam<-h.data[,1]
+row.names(h.data)<-nam
+h.data<-h.data[,-1]
+
+
+#Transform grams to kilograms
+h.data[,2]<-h.data[,2]/1000
+names(h.data)[names(h.data) == "Body_mass_g"] <- "Body_mass_kg"
+
+#Delete columns not needed in the analyses
+h.data<-h.data[,-c(3,5,7,9)]
+
+#remove NAs (Au. gardhi and K. platyops) and columns that won't be used 
+h.data2<-na.omit(h.data[,1:2])
+
+
+
+#Import trees
+
+#Import trees
+
+#Tree 1
+dembo<-read.nexus("dembo.con.tre")
+dembo$tip.label<- c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "Au. garhi",   "K. platyops", "P. robustus", "P. boisei", "P. aethiopicus",
+                    "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                    "H. antecessor", "Georgian H. erectus", "H. naledi", "Denisovan")
+dembo<-drop.tip(dembo, c("Denisovan","Au. garhi", "K. platyops"))#Drop tips of taxon without body mass and brain mass estimations
+plot(dembo)
+
+#Tree 2
+sediba<-read.nexus("sediba.con.tre")
+sediba$tip.label<- c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "Au. garhi",   "K. platyops", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi", "Denisovan")
+sediba<-drop.tip(sediba, c("Denisovan","Au. garhi", "K. platyops"))#Drop tips of taxon without body mass and brain mass estimations
+plot(sediba)
+
+#Tree 3
+naledi<-read.nexus("naledi.con.tre")
+naledi$tip.label<- c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "Au. garhi",   "K. platyops", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi", "Denisovan")
+naledi<-drop.tip(naledi, c("Denisovan","Au. garhi", "K. platyops"))#Drop tips of taxon without body mass and brain mass estimations
+plot(naledi)
+
+#Tree 4
+flores<-read.nexus("flores.con.tre")
+flores$tip.label<- c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "Au. garhi",   "K. platyops", "P. robustus", "P. boisei", "P. aethiopicus",
+                     "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
+                     "H. antecessor", "Georgian H. erectus", "H. naledi", "Denisovan")
+flores<-drop.tip(flores, c("Denisovan","Au. garhi", "K. platyops"))#Drop tips of taxon without body mass and brain mass estimations
+plot(flores)
+
+
+
+
+#Starts function
+
+get.regressions<-function (data, ph, hnode, name){#where data is a data.frame with two columns (brain mass and body mass), ph is the phylogeny, hnode is the node number of the origin of the genus Homo for that tree, name of the dataset
+  
+  # transform body mass and brain mass to ln
+  
+  #Body mass ACSR
+  anc.bm<-fastAnc(ph,data$Body_mass_kg,vars=TRUE,CI=TRUE) # estimate states  with variances & 95% confidence intervals for each node
+  
+  num.bm<-anc.bm$ace
+  num.bm<-log(num.bm)#transform to ln
+  
+  #Brain mass ACSR
+  anc.brm<-fastAnc(ph,data$Brain_weight_g,vars=TRUE,CI=TRUE) # estimate states  with variances & 95% confidence intervals for each node
+  
+  num.brm<-anc.brm$ace
+  num.brm<-log(num.brm)
+  
+  
+  #Regressions
+  #N1 make a regression of all the data 
+  
+  #Create plot
+  plot(num.bm~num.brm, xlab="ln Brain mass (g)" ,
+       ylab="ln Body mass (kg)", pch = 16, col=ifelse(as.numeric(names(num.bm))<as.numeric(hnode), "blue", "black"))
+  abline(lm(num.bm~num.brm), col="red")
+  
+  
+  reg<-lm(num.bm~num.brm)#the formula is in the form of y~x
+  summary(reg)
+
+  #N2 make a regression from node 1 to the node of Homo origin  
+  
+  #Create plot
+  
+  plot(num.bm[1:which(names(num.bm)==hnode)]~num.brm[1:which(names(num.brm)==hnode)], xlab="ln Brain mass (g)",
+       ylab="ln Body mass (kg)", pch = 16, col=ifelse(as.numeric(names(num.bm[1:which(names(num.bm)==hnode)]))==as.numeric(hnode),"red","blue"))
+  abline(lm(num.bm[1:which(names(num.bm)==hnode)]~num.brm[1:which(names(num.bm)==hnode)]), col="red")
+  
+  
+  reg2<-lm(num.bm[1:which(names(num.bm)==hnode)]~num.brm[1:which(names(num.bm)==hnode)])#the formula is in the form of y~x
+  summary(reg2)
+  
+  #N3 make a regression from node 13 to 24 
+
+  #Create plot
+  
+  plot(num.bm[which(names(num.bm)==hnode):length(num.bm)]~num.brm[which(names(num.bm)==hnode):length(num.brm)], xlab="ln Brain mass (g)",
+       ylab="ln Body mass (kg)", pch = 16, col=ifelse(as.numeric(names(num.bm[which(names(num.bm)==hnode):length(num.bm)]))==as.numeric(hnode),"red","black"))
+  abline(lm(num.bm[which(names(num.bm)==hnode):length(num.bm)]~num.brm[which(names(num.bm)==hnode):length(num.brm)]), col="red")
+  
+  
+  reg3<-lm(num.bm[which(names(num.bm)==hnode):length(num.bm)]~num.brm[which(names(num.bm)==hnode):length(num.brm)])#the formula is in the form of y~x
+  summary(reg3)
+  
+}
+
+
+#Use the function get.regressions to get the brain vs body mass ancestral states regressions for each hypothesis  
+
+get.regressions(h.data2, dembo, "33", "dembo")
+get.regressions(h.data2, sediba, "34", "sediba")
+get.regressions(h.data2, naledi, "33", "naledi")
+get.regressions(h.data2, flores, "33", "flores")
+```
