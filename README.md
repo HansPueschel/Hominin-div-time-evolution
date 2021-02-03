@@ -1,6 +1,7 @@
 ---
 Title: New divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution 
-corresponding authors:
+
+Corresponding authors:
 - name: Hans P. Püschel
   affiliation: University of Edinburgh
   email: h.p.puschel-rouliez@sms.ed.ac.uk
