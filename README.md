@@ -1,5 +1,5 @@
 ---
-Title: New divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution 
+## New divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution ##
 
 Corresponding authors:
 - Hans P. Püschel
@@ -8,6 +8,7 @@ Corresponding authors:
 - Thomas A. Püschel 
   affiliation: University of Oxford
   email: thomas.puschelrouliez@anthro.ox.ac.uk 
+
 date: 2021-02-03
 journal: Nature Ecology & Evolution
 url: 
@@ -23,12 +24,12 @@ Data and analyses used in Püschel et al. 2021, Nature Ecology and Evolution, do
 
 # Contents #
 
-1) The folder Nexus_files contains the nexus files necessary to replicate the TED analyses in MrBayes for the four topological hypothesis tested on the paper (see methods for more details). 
+1) The **Nexus_files** folder contains all the nexus files necessary to replicate the TED analyses in MrBayes for the four topological hypothesis tested in our paper (see the methods section for more details). 
 
-2) the .con.tre files are the majority rule consensus trees obtained in the TED analyses for the four topological hypotheses. These are necessary to run the R scripts contained in R_scripts_TED_hominin.Rmd.You can also obtain these files if you replicate the full analysis using the nexus files in MrBayes.
+2) The **.con.tre** files correspond to the majority rule consensus trees obtained in the TED analyses for the four topological hypotheses. These files are necessary to run the R scripts contained in **R_scripts_TED_hominin.Rmd**.These files can also be obtained if the full analysis is replicated using the nexus files in MrBayes.
 
-3) the .csv files are tables with information about body mass, brain mass and PEQ of the taxa of interest of the paper. These are necessary to run the R scripts contained in R_scripts_TED_hominin.Rmd.
+3) The **.csv** files correspond to tables with information about body mass, brain mass and PEQ for each one of the taxa analysed in our paper. These files are necessary to run the R scripts contained in **R_scripts_TED_hominin.Rmd**.
 
-4) The _post_tc_trees.txt files are files that contained total of 9002 time-calibrated posterior trees sampled for each one of the four analyses. These are necessary for point 5) of the script in R_scripts_TED_hominin.Rmd. You can also obtain these files if you replicate the full analysis using the nexus files in MrBayes, and then using the code in the point 5) of R_scripts_TED_hominin.Rmd with the .t and .p files. 
+4) The **post_tc_trees.txt** files contained the 9002 time-calibrated posterior trees sampled for each one of the four analyses. These are necessary to run section 5) of the script in **R_scripts_TED_hominin.Rmd**. These files can also be obtained if the full analysis is replicated using the nexus files in MrBayes, and then using the code avaliblae in section 5) of **R_scripts_TED_hominin.Rmd** with the **.t** and **.p files**. 
 
-5) The R_scripts_TED_hominin.Rmd contains all the scripts necessary to replicate this study.
+5) The **R_scripts_TED_hominin.Rmd** file contains all the scripts necessary to replicate this study.
