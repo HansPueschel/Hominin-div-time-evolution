@@ -1,5 +1,5 @@
 ---
-### New divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution ###
+# New divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution #
 
 Corresponding authors:
 - Hans P. Püschel
@@ -10,19 +10,24 @@ Corresponding authors:
   email: thomas.puschelrouliez@anthro.ox.ac.uk 
 
 date: 2021-02-03
+
 journal: Nature Ecology & Evolution
+
 url: 
+
 doi: 
+
 date_published: 
+
 ...
 
-# Hominin-div-times-evolution #
+## Hominin-div-times-evolution ##
 
 Data and analyses used in Püschel et al. 2021, Nature Ecology and Evolution, doi:
 
 >These are the files necessary to replicate the study “New divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution” by Hans P. Püschel, Ornella C. Bertrand, Joseph E. O’Reilly, René Bobe & Thomas A. Püschel
 
-# Contents #
+## Contents ##
 
 1) The **Nexus_files** folder contains all the nexus files necessary to replicate the TED analyses in MrBayes for the four topological hypothesis tested in our paper (see the methods section for more details). 
 
