@@ -1,10 +1,10 @@
 ---
-title: "R script used in A Total Evidence approach to estimate divergence times in hominins Assessing body mass and encephalization trends in human evolution"
+title: "R script used in New divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution"
 author: "Hans P. Püschel and Thomas A. Püschel"
 date: "24-11-2020"
 output: html_document
 ---
-This document contains the R script necessary to get the results and plots of the paper "A Total Evidence approach to estimate divergence times in hominins: Assessing body mass and encephalization trends in human evolution" by Hans P. Püschel, Ornella C. Bertrand, Joseph E. O’Reilly, René Bobe & Thomas A. Püschel. 
+This document contains the R script necessary to get the results and plots of the paper **"New divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution"** by Hans P. Püschel, Ornella C. Bertrand, Joseph E. O’Reilly, René Bobe & Thomas A. Püschel. 
 
 **0) Load all the required packages**
 ```{r, echo=FALSE}
