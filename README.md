@@ -1,5 +1,5 @@
 ---
-# New divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution #
+# Divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution #
 
 Corresponding authors:
 
@@ -31,7 +31,7 @@ date_published:
 
 Data and analyses used in Püschel et al. 2021, Nature Ecology and Evolution, doi:
 
->These are the files necessary to replicate the study “New divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution” by Hans P. Püschel, Ornella C. Bertrand, Joseph E. O’Reilly, René Bobe & Thomas A. Püschel
+>These are the files necessary to replicate the study “Divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution” by Hans P. Püschel, Ornella C. Bertrand, Joseph E. O’Reilly, René Bobe & Thomas A. Püschel
 
 ## Contents ##
 
