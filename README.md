@@ -1,3 +1,5 @@
+
+[![DOI](https://zenodo.org/badge/335695240.svg)](https://zenodo.org/badge/latestdoi/335695240)
 ---
 # Divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution #
 
@@ -21,7 +23,7 @@ journal: Nature Ecology & Evolution
 
 url: 
 
-doi: [![DOI](https://zenodo.org/badge/335695240.svg)](https://zenodo.org/badge/latestdoi/335695240)
+doi: 
 
 date_published: 
 
