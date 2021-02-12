@@ -21,7 +21,7 @@ journal: Nature Ecology & Evolution
 
 url: 
 
-doi: 
+doi: [![DOI](https://zenodo.org/badge/335695240.svg)](https://zenodo.org/badge/latestdoi/335695240)
 
 date_published: 
 
