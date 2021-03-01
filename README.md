@@ -193,7 +193,7 @@ For reproducibility purposes, here is the output of `devtools::session_info()` u
 ```
 
 ## Checkpoint for reproducibility
-To rerun all the analyses with the packages as they existed at the time of our analyses, we suggest using the `checkpoint` [package](https://cran.r-project.org/web/packages/checkpoint/index.html), and running the following code before carrying out the analysis:
+To rerun all the analyses with the packages as they existed on CRAN at the time of our analyses, we suggest using the `checkpoint` [package](https://cran.r-project.org/web/packages/checkpoint/index.html), and running the following code before carrying out the analysis:
 
 ```{r}
 checkpoint("2020-02-01") 
