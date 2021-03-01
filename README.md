@@ -61,6 +61,7 @@ Data and analyses used in Püschel et al. 2021, Nature Ecology and Evolution, do
 
 For reproducibility purposes, here is the output of `devtools::session_info()` used to perform the analyses in the publication.
 
+```{r}
 ─ Session info ──────────────────────────────────────────────────────────────────────────────────────────────────────────
  setting  value                       
  version  R version 4.0.2 (2020-06-22)
@@ -189,6 +190,7 @@ For reproducibility purposes, here is the output of `devtools::session_info()` u
  yaml                2.2.1      2020-02-01 [1] CRAN (R 4.0.0)
 
 [1] /Library/Frameworks/R.framework/Versions/4.0/Resources/library
+```
 
 ## Checkpoint for reproducibility
 To rerun all the analyses with the packages as they existed at the time of our analyses, we suggest using the `checkpoint` [package](https://cran.r-project.org/web/packages/checkpoint/index.html), and running the following code before carrying out the analysis:
