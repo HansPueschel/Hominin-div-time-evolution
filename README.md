@@ -1,17 +1,23 @@
 
 [![DOI](https://zenodo.org/badge/335695240.svg)](https://zenodo.org/badge/latestdoi/335695240)
----
+------
+
 # Divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution #
+
+This repository contains all the code and data used in the manuscript [Link to paper]()
+
+To cite the paper: 
+>
 
 Corresponding authors:
 
-- Hans P. Püschel
+- **Hans P. Püschel**
 
   affiliation: University of Edinburgh
   
   email: h.p.puschel-rouliez@sms.ed.ac.uk
   
-- Thomas A. Püschel 
+- **Thomas A. Püschel**  
 
   affiliation: University of Oxford
   
@@ -27,13 +33,15 @@ doi:
 
 date_published: 
 
-...
+------
 
 ## Hominin-div-times-evolution ##
 
 Data and analyses used in Püschel et al. 2021, Nature Ecology and Evolution, doi:
 
 >These are the files necessary to replicate the study “Divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution” by Hans P. Püschel, Ornella C. Bertrand, Joseph E. O’Reilly, René Bobe & Thomas A. Püschel
+
+------
 
 ## Contents ##
 
@@ -47,8 +55,15 @@ Data and analyses used in Püschel et al. 2021, Nature Ecology and Evolution, do
 
 5) The `R_scripts_TED_hominin.Rmd` file contains all the scripts necessary to replicate this study.
 
+------
+
 ## Session information
 
 For reproducibility purposes, here is the output of `devtools:session_info()` used to perform the analyses in the publication.
 
+## Checkpoint for reproducibility
+To rerun all the analyses with the packages as they existed at the time of our analyses, we suggest using the `checkpoint` [package](https://cran.r-project.org/web/packages/checkpoint/index.html), and running the following code before carrying out the analysis:
 
+```{r}
+checkpoint("2020-02-01") 
+```
