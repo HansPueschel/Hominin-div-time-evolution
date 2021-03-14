@@ -33,14 +33,14 @@ par(mar=c(2,2,2,2))
 
 #Functions
 
-#Function for fix taxa names and Drop tips of taxa without body mass and/or brain mass estimations
+#Function to correct taxa names and drop tips of taxa without body mass and/or brain mass data available
 newtree<-function (tree){
   
   tree$tip.label<- c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ramidus", "Au. anamensis", "Au. afarensis", "Au. africanus", "Au. garhi",   "K. platyops", "P. robustus", "P. boisei", "P. aethiopicus",
                      "Au. sediba", "H. habilis", "H. rudolfensis", "African H. erectus", "Asian H. erectus", "H. heidelbergensis", "H. neanderthalensis", "H. floresiensis", "H. sapiens",
                      "H. antecessor", "Georgian H. erectus", "H. naledi", "Denisovan")
   
-  #Drop tips of taxa without body mass and/or brain mass estimations
+  #Drop tips of taxa without body mass and/or brain mass data available
   
   ph<-drop.tip(tree, c("K. platyops", "Au. garhi", "Denisovan"))
   plot(ph)
@@ -49,9 +49,9 @@ newtree<-function (tree){
 }
 
 
-#Plot stadistics function  
+#Plot statistics function  
 
-plot_model<-function(model, name, tree){ #Plot stadistics function 
+plot_model<-function(model, name, tree){ #Plot statistics function 
   
   pdf(paste0(name,"residuals-vs-fitted.pdf"),width = 18.27, height = 11.69, paper= "a4r") 
   
@@ -60,7 +60,7 @@ plot_model<-function(model, name, tree){ #Plot stadistics function
   res <- resid(model, type="n")
   qqnorm(res)
   qqline(res)
-  res[which.max(res)]#species with the maximum residual 
+  res[which.max(res)]#species with the maximum residual values
   
   # Close the pdf file
   dev.off() 
@@ -70,13 +70,13 @@ plot_model<-function(model, name, tree){ #Plot stadistics function
   capture.output(lillie.test(rnorm(model)),file=paste0(name,"rnorm.doc"))
   
   #R2 values
-  R2.pred(model, phy=tree)#I will use this one for the paper as it's more appropriate 
+  R2.pred(model, phy=tree)
   capture.output(R2.pred(model, phy=tree),file=paste0(name,"R2.doc"))
   
 }
 
 
-##Import Homo data
+##Import trait data
 
 #Import data of body mass and brain mass 
 homo.dat<-read.csv("Homo_brain-body_mass2.csv", sep=",", header=T, row.names = 1)
@@ -91,7 +91,7 @@ naledi<-read.nexus("naledi.con.tre")
 sediba<-read.nexus("sediba.con.tre")
 flores<-read.nexus("flores.con.tre")
 
-#Fix taxa names and Drop tips of taxa without body mass and/or brain mass estimations
+#Correct taxa names and drop tips of taxa without body mass and/or brain mass data available
 dembo<-newtree(dembo)
 naledi<-newtree(naledi)
 sediba<-newtree(sediba)
@@ -222,13 +222,13 @@ for (i in 1:nrow(homo.data2)){
 ```
 
 
-#Generate table for the paper
+#Generate table 
 ```{r}
 homo.data_new<-cbind(homo.data2,Expected_brain_weight_g_dembo, PEQ_dembo,Expected_brain_weight_g_sediba, PEQ_sediba, Expected_brain_weight_g_naledi,PEQ_naledi,Expected_brain_weight_g_flores,PEQ_flores)
 write.csv(homo.data_new, "Homo_b-b_mass_PEQ.csv")
 ```
 
-#generate table for the ancestral state reconstructions in the majority rule trees
+#Generate table for the ancestral state reconstructions using the majority rule trees
 ```{r}
 homo2<-read.csv("Homo_b-b_mass_PEQ.csv")
 homo3<-add_row(homo2, homo.dat[8,], .after = 7)
@@ -318,7 +318,7 @@ get.ancestral<-function(homo.data,ph, nodes){#where homo.data is a data.frame wi
     dat3<-as.numeric(dat2)
     dat3<-setNames(dat3, names(dat2))
     
-    #Drop the taxa with missing data. This works for Body mass and PEQ that NAs
+    #Drop the taxa with missing data. 
     if (anyNA(dat1, recursive = FALSE)==TRUE){
       phy<-drop.tip(ph, names(which(is.na(dat1))))
       anc.eq<-fastAnc(phy,dat3,vars=TRUE,CI=TRUE) # estimate states  with variances & 95% confidence intervals for each node
@@ -328,16 +328,16 @@ get.ancestral<-function(homo.data,ph, nodes){#where homo.data is a data.frame wi
       num.anc2<-round(num.anc,digits =2)
       
       
-      #plot ancestral states in the tree
+      #plot ancestral states onto the tree
       
       ####Using Maximum likelihood#####
       
-      #Represent ancestral states as colors 
+      #Represent ancestral states as colours 
       plt<-contMap(phy,dat3, plot=FALSE)
       plt<-setMap(plt, invert=TRUE)  
       
       
-      # 2. Create a plot
+      # 2. Create plot
       plot(plt,legend=FALSE,ylim=c(1-0.09*(Ntip(plt$tree)-1),Ntip(plt$tree)))
       
       
@@ -357,7 +357,7 @@ get.ancestral<-function(homo.data,ph, nodes){#where homo.data is a data.frame wi
       #errorbar.contMap(plt)#how to plot the error
       
       
-      #use a phenogram to represent the phenotypes 
+      #use a phenogram to display the phenotypes 
       par(mar = c(5.1, 4.1, 4.1, 2.1))
       
      
@@ -366,7 +366,7 @@ get.ancestral<-function(homo.data,ph, nodes){#where homo.data is a data.frame wi
       
       
       
-    }else {#######This is for cases without NAs as brain mass #######################
+    }else {#######This is for cases without NAs i.e., brain mass #######################
       
       ####Using Maximum likelihood#####
       
@@ -416,7 +416,7 @@ get.ancestral<-function(homo.data,ph, nodes){#where homo.data is a data.frame wi
   }
 }
 
-#Use the function get.ancestral to get the ML ancestral states from the different trees
+#Use the function get.ancestral() to get the ML ancestral states from the different trees
 get.ancestral(dat.dembo,dembo, c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24))
 get.ancestral(dat.sediba, sediba, c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 24))
 get.ancestral(dat.naledi, naledi,c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 19, 21, 22, 24))
@@ -502,7 +502,7 @@ This code calculates the ML ancestral state reconstructions of brain mass, body 
 homo.data<-read.csv("Homo_b-b_m.csv", sep=",", header=T, row.names = 1)
 
 
-#prepare data for body mass and PEQ ancestral state reconstructions: remove "K_platyops" and "Au_garhi" due lack of body mass
+#prepare data for body mass and PEQ ancestral state reconstructions: remove "K_platyops" and "Au_garhi" due to their lack of body mass data
 homo.data2<-homo.data[-c(8,9),]
 
 #Transform data for PEQ calculations
@@ -538,7 +538,7 @@ t<-dembo_trees
 
 for (i in 1:(length(t))){
   
-  #remove "K_platyops" and "Au_garhi" due lack of body mass
+  #remove "K_platyops" and "Au_garhi" due to their lack of body mass
   t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
 }
 
@@ -632,7 +632,7 @@ write.csv(bod_anc_dembo, file = "dembo_body_anc.csv")
 
 #############################################
 #Anc rec PEQ
-#remove "K_platyops" and "Au_garhi" due lack of body mass
+#remove "K_platyops" and "Au_garhi" due to their lack of body mass
 
 t<-dembo_trees
 
@@ -659,7 +659,7 @@ colnames(exp_brain)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ram
 for (i in 1:(length(t))){
   
   
-  #generate a PGLS equation for calculate PEQ for each one of the sampled trees
+  #generate a PGLS equation to calculate PEQ for each one of the sampled trees
   dem_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data.ln, correlation = corBrownian(1,t[[i]]), method="REML")#REML is recommended over ML
   Expected_brain_weight_g_dembo<-vector()
   PEQ_dembo<-vector()
@@ -888,7 +888,7 @@ t<-sediba_trees
 
 for (i in 1:(length(t))){
   
-  #remove "K_platyops" and "Au_garhi" due lack of body mass
+  #remove "K_platyops" and "Au_garhi" due to their lack of body mass
   t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
 }
 
@@ -987,7 +987,7 @@ t<-sediba_trees
 
 for (i in 1:(length(t))){
   
-  #"K_platyops" and "Au_garhi" due lack of body mass
+  #"K_platyops" and "Au_garhi" due to their lack of body mass
   t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
 }
 
@@ -1008,7 +1008,7 @@ colnames(exp_brain)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ram
 for (i in 1:(length(t))){
   
   
-  #generate a PGLS equation for calculate PEQ for each one of the sampled trees
+  #generate a PGLS equation to calculate PEQ for each one of the sampled trees
   dem_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data.ln, correlation = corBrownian(1,t[[i]]), method="REML")#REML is recommended over ML
   Expected_brain_weight_g_sediba<-vector()
   PEQ_sediba<-vector()
@@ -1222,7 +1222,7 @@ naledi_trees<-read.tree("naledi_post_tc_trees.txt")
 
 for (i in 1:(length(naledi_trees))){
   
-  #remove Denisova: no body mass and brain mass estimations
+  #remove Denisova: no body mass and brain mass data available
   naledi_trees[[i]]<-drop.tip(naledi_trees[[i]], "Denisovan")
 }
 
@@ -1236,7 +1236,7 @@ t<-naledi_trees
 
 for (i in 1:(length(t))){
   
-  #remove "K_platyops" and "Au_garhi" due lack of body mass
+  #remove "K_platyops" and "Au_garhi" due to their lack of body mass
   t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
 }
 
@@ -1336,7 +1336,7 @@ t<-naledi_trees
 
 for (i in 1:(length(t))){
   
-  #"K_platyops" and "Au_garhi" due lack of body mass
+  #"K_platyops" and "Au_garhi" due to their lack of body mass
   t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
 }
 
@@ -1357,7 +1357,7 @@ colnames(exp_brain)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ram
 for (i in 1:(length(t))){
   
   
-  #generate a PGLS equation for calculate PEQ for each one of the sampled trees
+  #generate a PGLS equation to calculate PEQ for each one of the sampled trees
   dem_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data.ln, correlation = corBrownian(1,t[[i]]), method="REML")#REML is recommended over ML
   Expected_brain_weight_g_naledi<-vector()
   PEQ_naledi<-vector()
@@ -1569,7 +1569,7 @@ flores_trees<-read.tree("flores_post_tc_trees.txt")
 
 for (i in 1:(length(flores_trees))){
   
-  #remove Denisova: no body mass and brain mass estimations
+  #remove Denisova: no body mass and brain mass data available
   flores_trees[[i]]<-drop.tip(flores_trees[[i]], "Denisovan")
 }
 
@@ -1583,7 +1583,7 @@ t<-flores_trees
 
 for (i in 1:(length(t))){
   
-  #remove "K_platyops" and "Au_garhi" due lack of body mass
+  #remove "K_platyops" and "Au_garhi" due to their lack of body mass
   t[[i]]<-drop.tip(t[[i]], c("K_platyops","Au_garhi" ))
 }
 
@@ -1677,7 +1677,7 @@ write.csv(bod_anc_flores, file = "flores_body_anc.csv")
 
 #############################################
 #Anc rec PEQ
-#remove "K_platyops" and "Au_garhi" due lack of body mass
+#remove "K_platyops" and "Au_garhi" due to their lack of body mass
 
 t<-flores_trees
 
@@ -1704,7 +1704,7 @@ colnames(exp_brain)<-c("G. gorilla", "P. troglodytes", "S. tchadensis", "Ar. ram
 for (i in 1:(length(t))){
   
   
-  #generate a PGLS equation for calculate PEQ for each one of the sampled trees
+  #generate a PGLS equation to calculate PEQ for each one of the sampled trees
   dem_brownian<-gls(ln_Brain_weight_g~ln_Body_mass_g, data=homo.data.ln, correlation = corBrownian(1,t[[i]]), method="REML")#REML is recommended over ML
   Expected_brain_weight_g_flores<-vector()
   PEQ_flores<-vector()
@@ -1975,7 +1975,7 @@ plot(flores)
 
 
 
-#Starts function
+#Start function
 
 get.regressions<-function (data, ph, hnode, name){#where data is a data.frame with two columns (brain mass and body mass), ph is the phylogeny, hnode is the node number of the origin of the genus Homo for that tree, name of the dataset
   
