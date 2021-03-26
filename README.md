@@ -1,6 +1,6 @@
 # Divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution #
 
-This repository contains all the code and data used in the manuscript [Link to paper]()
+This repository contains all the code and data used in our [paper](https://dx.doi.org/10.1038/s41559-021-01431-1)
 
 All these files are also available in zenodo [![DOI](https://zenodo.org/badge/335695240.svg)](https://zenodo.org/badge/latestdoi/335695240)
 
@@ -21,15 +21,15 @@ Corresponding authors:
   
   email: thomas.puschelrouliez@anthro.ox.ac.uk 
 
-date: 2021-02-03
+date: 2021/02/03
 
 journal: Nature Ecology & Evolution
 
 url: 
 
-doi: 
+doi: https://dx.doi.org/10.1038/s41559-021-01431-1
 
-date_published: 
+date published: 01/04/2021 
 
 ------
 
