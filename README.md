@@ -5,7 +5,7 @@ This repository contains all the code and data used in our [paper](https://dx.do
 All these files are also available in zenodo [![DOI](https://zenodo.org/badge/335695240.svg)](https://zenodo.org/badge/latestdoi/335695240)
 
 To cite the paper: 
->
+> Püschel, H.P., Bertrand, O. O’Reilly, J.E., Bobe, R. Püschel T.A. Divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution. *Nature Ecology and Evolution*.https://dx.doi.org/10.1038/s41559-021-01431-1
 
 Corresponding authors:
 
@@ -35,7 +35,7 @@ date published: 01/04/2021
 
 ## Hominin-div-times-evolution ##
 
-Data and analyses used in Püschel et al. 2021, Nature Ecology and Evolution, doi:
+Data and analyses used in Püschel et al. 2021, Nature Ecology and Evolution, doi: https://dx.doi.org/10.1038/s41559-021-01431-1
 
 >These are the files necessary to replicate the study “Divergence-time estimates for hominins provide insight into encephalization and body mass trends in human evolution” by Hans P. Püschel, Ornella C. Bertrand, Joseph E. O’Reilly, René Bobe & Thomas A. Püschel
 
